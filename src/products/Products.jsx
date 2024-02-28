@@ -17,46 +17,59 @@ const Products = () => {
 
   const [category, setCategory] = useState("");
   const [filteredProducts, setFilteredProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // State to manage loading status
+  const [searchError, setSearchError] = useState(false);
 
   const firestore = getFirestore();
 
   useEffect(() => {
-    getProducts({ category });
-  }, [category]);
+    fetchProducts(); // Fetch products initially
+  }, [category]); // Fetch products when category changes
 
-  useEffect(() => {
-    if (filteredProducts.length === 0) {
-      getProducts({ category }); // Fetch all products from Redux when filteredProducts is empty
+  // Function to fetch products
+  const fetchProducts = async () => {
+    setLoading(true); // Set loading to true while fetching
+    try {
+      await getProducts({ category });
+    } catch (error) {
+      console.error("Error fetching products:", error);
     }
-  }, [filteredProducts, category, getProducts]);
+    setLoading(false); // Set loading to false when fetching is done
+  };
 
   const searchFirestore = async (searchInput) => {
-    setLoading(true);
+    setLoading(true); // Set loading to true while searching
     try {
       if (searchInput !== "") {
         const searchQuery = query(
           collection(firestore, "products"),
-          where("name", "==", searchInput)
+          where("name", ">=", searchInput),
+          where("name", "<=", searchInput.toLowerCase() + "\uf8ff")
         );
         const searchSnapshot = await getDocs(searchQuery);
         const searchResults = searchSnapshot.docs.map((doc) => doc.data());
         console.log("Search Results:", searchResults);
-        setFilteredProducts(searchResults);
+
+        if (searchResults.length === 0) {
+          setSearchError(true);
+        } else {
+          setSearchError(false);
+          setFilteredProducts(searchResults);
+        }
       } else {
+        setSearchError(false);
         setFilteredProducts([]);
       }
     } catch (error) {
       console.error("Error searching Firestore:", error);
     }
-    setLoading(false);
+    setLoading(false); // Set loading to false when searching is done
   };
 
   const handleSearch = async (searchInput) => {
     await searchFirestore(searchInput);
   };
 
-  // Adjusting productsToDisplay based on conditions
   let productsToDisplay = [];
 
   if (filteredProducts.length > 0) {
@@ -74,7 +87,7 @@ const Products = () => {
           flexWrap: "wrap",
         }}
       >
-        <SearchBar onSearch={handleSearch} onClear={() => setFilteredProducts([])} reduxProducts={reduxProducts}/>
+        <SearchBar onSearch={handleSearch} reduxProducts={reduxProducts} />
       </div>
       <div
         className="box"
@@ -85,32 +98,40 @@ const Products = () => {
           margin: "0px",
         }}
       >
-        {loading && <Loader />}
-        {!loading &&
-          (productsToDisplay.length === 0 ? (
-            <div style={{ paddingTop: "80px" }}>
-              <div style={{ fontSize: "20px", color: "red" }}>
-                No products found.
+        {loading ? ( // Display loader when loading is true
+          <Loader />
+        ) : (
+          <div className="box" style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            margin: "0px",
+          }}>
+            {searchError ? (
+              <div style={{ paddingTop: "80px" }}>
+                <div style={{ fontSize: "20px", color: "red" }}>
+                  No results found.
+                </div>
               </div>
-            </div>
-          ) : (
-            productsToDisplay.map((product, i) => (
-              <ProductCard key={i} {...product} />
-            ))
-          ))}
+            ) : (
+              productsToDisplay.map((product, i) => (
+                <ProductCard key={i} {...product} />
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-const SearchBar = ({ onSearch, onClear, reduxProducts }) => {
+const SearchBar = ({ onSearch, reduxProducts }) => {
   const [searchInput, setSearchInput] = useState("");
 
   const handleSearchInputChange = (event) => {
     setSearchInput(event.target.value);
     if (event.target.value === "") {
-      // If search input becomes empty, trigger the onClear function
-      onClear();
+      onSearch(""); // Call onSearch with empty string to show all products
     }
   };
 
@@ -121,40 +142,53 @@ const SearchBar = ({ onSearch, onClear, reduxProducts }) => {
 
   return (
     <>
-    
-    <form onSubmit={handleSearch}>
-      <input
-        style={{ padding: "20px" }}
-        type="search"
-        placeholder="Search by name"
-        value={searchInput}
-        onChange={handleSearchInputChange}
-        list="products"
-      />
-      <datalist id="products" style={{background:"black"}}>
-        {
-          reduxProducts.map((product, i )=> (
-            <>
-            <option value={product.name} style={{color:"blue"}}></option>
-            </>
-          ))
-        }
-      </datalist>
-      <button
-        type="submit"
+    <form
+        onSubmit={handleSearch}
         style={{
-          border: "2px solid red",
-          padding: "10px",
-          background: "red",
-          color: "white",
-          marginLeft: "10px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
         }}
       >
-        Search
-      </button>
-    </form>
+        <input
+          style={{
+            padding: "10px",
+            fontSize: "16px",
+            border: "1px solid #ccc",
+            borderRadius: "5px",
+            width: "100%",
+            maxWidth: "400px", // Limit maximum width for larger screens
+            marginBottom: "10px",
+          }}
+          type="search"
+          placeholder="Search by name"
+          value={searchInput}
+          onChange={handleSearchInputChange}
+          list="products"
+        />
+        <button
+          type="submit"
+          style={{
+            border: "none",
+            padding: "10px 20px",
+            background: "#1877f2",
+            color: "white",
+            borderRadius: "5px",
+            fontSize: "16px",
+            cursor: "pointer",
+            width: "100%",
+            maxWidth: "400px", // Limit maximum width for larger screens
+          }}
+        >
+          Search
+        </button>
+      </form>
+      <datalist id="products">
+        {reduxProducts.map((product, i) => (
+          <option key={i} value={product.name} />
+        ))}
+      </datalist>
     </>
-    
   );
 };
 
